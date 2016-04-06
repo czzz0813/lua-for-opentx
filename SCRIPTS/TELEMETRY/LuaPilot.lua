@@ -780,31 +780,28 @@ local FlightModeName = {}
 -- GPS Fix
 -- ###############################################################
 
-    local gpsFix =  (data.gpssatcount%10)
-    local satCount =   (data.gpssatcount -  (data.gpssatcount%10))*0.1
+    local gpsFix =  (math.floor(data.gpssatcount / 1000))
+    local satCount =   (data.gpssatcount % 100)
     
     if data.gpssatsid==-1 then 
       drawText(68, 15, "Check Telemetry Tem2", SMLSIZE)
         
     
-    elseif gpsFix >= 4 then
-        drawText(70,15, "3D D.GPS, "..satCount..' Sats', SMLSIZE)
+    elseif gpsFix == 3 then
+        drawText(70,15, "3D Fix & Home, "..satCount..' Sats', SMLSIZE)
         if GPSOKAY==1 and satCount>6 then
           GPSOKAY=3
           playFile("gps.wav") 
           playFile("good.wav") 
         end
 
-    elseif gpsFix == 3 then
+    elseif gpsFix == 1 then
         drawText(70,15, "3D FIX, "..satCount..' Sats', SMLSIZE)
         if GPSOKAY==1 and satCount>6 then
           GPSOKAY=3
           playFile("gps.wav") 
           playFile("good.wav") 
         end
-        
-    elseif gpsFix == 2 then
-        drawText(70,15, "2D FIX, "..satCount..' Sats', BLINK+SMLSIZE)
         
     
     else 

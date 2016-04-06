@@ -6,4 +6,4 @@ All credits go to the original creators of the script.
 All that will be done in this fork is alter the code so it will work with the Cleanflight fork INAV over at https://github.com/iNavFlight/inav.
 
 Changes so far:
-- None
+- Fixed GPS Fix and sattelite count
