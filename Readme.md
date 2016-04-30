@@ -7,3 +7,4 @@ All that will be done in this fork is alter the code so it will work with the Cl
 
 Changes so far:
 - Fixed GPS Fix and sattelite count
+- Fixed displaying of flightmodes. It will display Horizon, Angle, GPS hold, RTH and waypoint.
