@@ -24,7 +24,7 @@ local CalcBattResistance=0 --0=off 1=AutoCalc Lipo Resistance an correct Lipo.Le
 local battype=0   -- 0=Autodetection (1s,2s,3s,4s,6s,8s) or 7 for an 7s Battery Conf      #
 local BattLevelmAh = 0 --if 0 BatteryLevel calc from Volt else from this mAh Value        #
 local GPSOKAY=1 --1=play Wav files for Gps Stat , 0= Disable wav Playing for Gps Status   # 
-local SayFlightMode = 1 --0=off 1=on then play wav for Flightmodes changs                 #
+--local SayFlightMode = 1 --0=off 1=on then play wav for Flightmodes changs               #
 --                                                                                        #
 --######################################################################################### 
   
@@ -722,56 +722,59 @@ end
 -- Flightmodes Drawing for copter todo for plane,Folow
 -- ###############################################################
 
+local FourDigitFlightMode = math.floor((data.flightmodeNr % 10000) / 1000)
+local ThreeDigitFlightMode = math.floor((data.flightmodeNr % 1000) / 100)
+local TwoDigitFlightMode = math.floor((data.flightmodeNr % 100) / 10)
 local FlightModeName = {}
 
-    FlightModeName[0]="Stabilize"
-    FlightModeName[1]="Acro Mode"
-    FlightModeName[2]="Alt Hold"
-    FlightModeName[3]="Auto Mode"
-    FlightModeName[4]="Guided Mode"
-    FlightModeName[5]="Loiter Mode"
-    FlightModeName[6]="RTL Mode"
-    FlightModeName[7]="Circle Mode"
-    FlightModeName[8]="Invalid Mode"
-    FlightModeName[9]="Landing Mode"
-    FlightModeName[10]="Optic Loiter"
-    FlightModeName[11]="Drift Mode"
-    FlightModeName[12]="Invalid Mode"
-    FlightModeName[13]="Sport Mode"
-    FlightModeName[14]="Flip Mode"
-    FlightModeName[15]="Auto Tune"
-    FlightModeName[16]="Pos Hold"
-    FlightModeName[17]="Brake Mode"
-    FlightModeName[18]="No Telemetry"
+    FlightModeName[0]="Angle"
+    FlightModeName[1]="Horizon"
+    FlightModeName[2]="Pos Hold"
+    FlightModeName[3]="RTH"
+    FlightModeName[4]="WayPoint"
+    FlightModeName[5]="Invalid Mode"
+    FlightModeName[6]="No Telemetry"
+
     
-  if data.flightmodeNr < 0 or data.flightmodeNr > 17 then
-      data.flightmodeNr=12    
+	if data.flightmodeNr < 0 then
+      data.flightmodeNr=5 
+	
+	elseif FourDigitFlightMode == 1 or FourDigitFlightMode == 5 then
+		data.flightmodeNr=3
+		
+	elseif FourDigitFlightMode == 2 or FourDigitFlightMode == 6 then
+		data.flightmodeNr=4
+		
+	elseif ThreeDigitFlightMode >= 4 then
+		data.flightmodeNr=2
+		
+	elseif TwoDigitFlightMode == 2 then
+		data.flightmodeNr=1
+	
+	elseif TwoDigitFlightMode == 1 then
+		data.flightmodeNr = 0
   
-    elseif data.flightmodeId ==-1 or ( rxpercent==0 and data.flightmodeNr==0 )then
-      data.flightmodeNr=18
-  end
+	elseif data.flightmodeId ==-1 or ( rxpercent==0 and data.flightmodeNr==0 )then
+      data.flightmodeNr=6
+	  
+	else 
+		data.flightmodeNr = 5
+	end
     
     
     drawText(68, 1, FlightModeName[data.flightmodeNr], MIDSIZE)
     
-    if data.flightmodeNr~=lastflightModeNumber and SayFlightMode == 1 then
-      if data.flightmodeNr==6 or data.flightmodeNr==9 then 
-       playFile("/SCRIPTS/WAV/AVFM"..data.flightmodeNr.."A.wav") 
-      end
-      playFile("/SCRIPTS/WAV/AVFM"..data.flightmodeNr.."A.wav")
-    lastflightModeNumber=data.flightmodeNr
-  end
   
 
 -- ###############################################################
 -- Flightmode Image
 -- ###############################################################
 
-    if data.flightmodeNr == 6 or data.flightmodeNr == 9 then
-      lcd.drawPixmap(50, 2, "/SCRIPTS/BMP/H.bmp")  
-    elseif data.flightmodeNr >= 0 and data.flightmodeNr <= 2 then
+    -- if data.flightmodeNr == 6 or data.flightmodeNr == 9 then
+      -- lcd.drawPixmap(50, 2, "/SCRIPTS/BMP/H.bmp")  
+    if data.flightmodeNr == 0 or data.flightmodeNr == 1 then
       lcd.drawPixmap(50, 2, "/SCRIPTS/BMP/stab.bmp")
-    elseif data.flightmodeNr~=-1 or data.flightmodeNr~=12 then
+    else
       lcd.drawPixmap(50, 2, "/SCRIPTS/BMP/gps.bmp")
     end
   
@@ -780,8 +783,8 @@ local FlightModeName = {}
 -- GPS Fix
 -- ###############################################################
 
-    local gpsFix =  (math.floor(data.gpssatcount / 1000))
-    local satCount =   (data.gpssatcount % 100)
+    local gpsFix = math.floor(data.gpssatcount / 1000)
+    local satCount = data.gpssatcount % 100
     
     if data.gpssatsid==-1 then 
       drawText(68, 15, "Check Telemetry Tem2", SMLSIZE)
