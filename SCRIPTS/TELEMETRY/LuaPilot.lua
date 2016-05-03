@@ -14,7 +14,7 @@
 local HeadingOrDist = 2       --draw Hdg=0 / Draw Distance=1 / Draw Both alternatel=2     #
 local BatterymahAlarm = 0 --0=off or like 2200 for Alarming if you used more 2200mAh      #
 local SaybatteryPercent=1 ---0=off or 1 if you will hear you Batterypercent in 10% Steps  #
-local CellVoltAlarm=3.3 --0=off or like 3.3 to get an Alarm if you have less than 3.3V    #                            
+local CellVoltAlarm=0 --0=off or like 3.3 to get an Alarm if you have less than 3.3V    #                            
 --                                                                                        #
 --#########################################################################################                                                  
 -- Advance Configs:                                                                       #
@@ -51,11 +51,13 @@ local GPSOKAY=1 --1=play Wav files for Gps Stat , 0= Disable wav Playing for Gps
 
   
   local data = {}
-  data.battsumid =    getTelemetryId("VFAS")
+  
+	data.vfasid =    	getTelemetryId("VFAS")
+	data.celsid = 		getTelemetryId("Cels")
  	data.altid =        getTelemetryId("Alt")
---data.gpsaltid =     getTelemetryId("GAlt") 
+	--data.gpsaltid =     getTelemetryId("GAlt") 
 	data.spdid =        getTelemetryId("GSpd")
-  data.gpsid =        getTelemetryId("GPS")
+	data.gpsid =        getTelemetryId("GPS")
 	data.currentid =    getTelemetryId("Curr")
 	data.flightmodeId = getTelemetryId("Tmp1")
 	data.rssiId =       getTelemetryId("RSSI")
@@ -127,11 +129,12 @@ local GPSOKAY=1 --1=play Wav files for Gps Stat , 0= Disable wav Playing for Gps
 -------------------------------------------------------------------------------
 local function ResetVar() 
   
-  data.battsumid =    getTelemetryId("VFAS")
+	data.vfasid =    	getTelemetryId("VFAS")
+	data.celsid = 		getTelemetryId("Cels")
  	data.altid =        getTelemetryId("Alt")
---data.gpsaltid =     getTelemetryId("GAlt") 
+	--data.gpsaltid =     getTelemetryId("GAlt") 
 	data.spdid =        getTelemetryId("GSpd")
-  data.gpsid =        getTelemetryId("GPS")
+	data.gpsid =        getTelemetryId("GPS")
 	data.currentid =    getTelemetryId("Curr")
 	data.flightmodeId = getTelemetryId("Tmp1")
 	data.rssiId =       getTelemetryId("RSSI")
@@ -465,8 +468,18 @@ end
   local function GetnewTelemetryValue()
     
     local getValue = getValue --faster
+	
+	--if Cels is available from FrSky FLVSS then use it, else use VFAS
+	local cellResult = getValue(data.celsid)
+	if (type(cellResult) == "table") then
+		data.battsum = 0
+		for i, v in ipairs(cellResult) do
+			data.battsum = data.battsum + v
+		end
+	else
+		data.battsum =    getValue(data.vfasid)
+	end
     
-    data.battsum =    getValue(data.battsumid)
     data.alt =        getValue(data.altid)
     data.spd =        getValue(data.spdid) --knotes per h 
     data.current =    getValue(data.currentid)
