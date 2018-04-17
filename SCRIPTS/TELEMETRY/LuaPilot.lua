@@ -1,20 +1,20 @@
 --#########################################################################################
---#   LuaPilot v2.006  Lua Telemetry Script for Taranis                                   #
+--#   LuaPilot v2.008  Lua Telemetry Script for Taranis                                   #
 --#                                                                                       #
 --#  + with opentx 2.16 and above, tested with D4r-II & D8R & X4R                         #
---#  + works with Arducopter Flight  Controller like Pixhawk,APM and maybe others         #
+--#  + works with Arducopter Flight Controller like Pixhawk, APM, PX4 and maybe others    #
 --#                                                                                       #
---#  Thanks to SockEye, Richardoe, Schicksie,lichtl			                                  #    
+--#  Thanks to Lupinixx, athertop, gulp79, SockEye, Richardoe, Schicksie,lichtl                                       #    
 --#  _ben&Jace25(FPV-Community) and Clooney82&fnoopdogg                                   #
---#         									                                                            #
---#  LuaPilot © 2015 ilihack 							                                                #
+--#                                                                                       #
+--#  LuaPilot © 2017 ilihack                                                              #
 --#########################################################################################
 --Setup:                                                                                  #
 --                                                                                        #
 local HeadingOrDist = 2       --draw Hdg=0 / Draw Distance=1 / Draw Both alternatel=2     #
 local BatterymahAlarm = 0 --0=off or like 2200 for Alarming if you used more 2200mAh      #
 local SaybatteryPercent=1 ---0=off or 1 if you will hear you Batterypercent in 10% Steps  #
-local CellVoltAlarm=0 --0=off or like 3.3 to get an Alarm if you have less than 3.3V    #                            
+local CellVoltAlarm=3.3 --0=off or like 3.3 to get an Alarm if you have less than 3.3V    #
 --                                                                                        #
 --#########################################################################################                                                  
 -- Advance Configs:                                                                       #
@@ -22,13 +22,14 @@ local CellVoltAlarm=0 --0=off or like 3.3 to get an Alarm if you have less than 
 local MaxAvarageAmpere=0 -- 0=Off, Alarm if the avarage 5s current is over this Value     #
 local CalcBattResistance=0 --0=off 1=AutoCalc Lipo Resistance an correct Lipo.Level ALPHA #   
 local battype=0   -- 0=Autodetection (1s,2s,3s,4s,6s,8s) or 7 for an 7s Battery Conf      #
-local BattLevelmAh = 0 --if 0 BatteryLevel calc from Volt else from this mAh Value        #
+local BattLevelmAh = 0 --if 0 BatteryLevel calc from Volt, if -1 Fuel is used else        #
+                       --from this mAh Value                                             #
 local GPSOKAY=1 --1=play Wav files for Gps Stat , 0= Disable wav Playing for Gps Status   # 
---local SayFlightMode = 1 --0=off 1=on then play wav for Flightmodes changs               #
+local SayFlightMode = 1 --0=off 1=on then play wav for Flightmodes changs                 #
 --                                                                                        #
 --######################################################################################### 
-  
-  
+
+
 -- This program is free software; you can redistribute it and/or modify
 -- it under the terms of the GNU General Public License as published by
 -- the Free Software Foundation; either version 2 of the License, or
@@ -41,7 +42,7 @@ local GPSOKAY=1 --1=play Wav files for Gps Stat , 0= Disable wav Playing for Gps
 --
 -- You should have received a copy of the GNU General Public License
 -- along with this program; if not, see <http://www.gnu.org/licenses>.
- 
+
 
   local function getTelemetryId(name)
    field = getFieldInfo(name)
@@ -49,24 +50,26 @@ local GPSOKAY=1 --1=play Wav files for Gps Stat , 0= Disable wav Playing for Gps
     return -1
   end
 
-  
-  local data = {}
-  
-	data.vfasid =    	getTelemetryId("VFAS")
-	data.celsid = 		getTelemetryId("Cels")
- 	data.altid =        getTelemetryId("Alt")
-	--data.gpsaltid =     getTelemetryId("GAlt") 
-	data.spdid =        getTelemetryId("GSpd")
-	data.gpsid =        getTelemetryId("GPS")
-	data.currentid =    getTelemetryId("Curr")
-	data.flightmodeId = getTelemetryId("Tmp1")
-	data.rssiId =       getTelemetryId("RSSI")
-	data.gpssatsid =    getTelemetryId("Tmp2")
-	data.headingid =    getTelemetryId("Hdg")
-  
-  
+
+local data = {}
+  --data.battsumid =    getTelemetryId("VFAS")
+  data.vfasid =       getTelemetryId("VFAS")
+  data.celsid =       getTelemetryId("Cels")
+  data.altid =        getTelemetryId("Alt")
+  --data.gpsaltid =     getTelemetryId("GAlt") 
+  data.spdid =        getTelemetryId("GSpd")
+  data.gpsid =        getTelemetryId("GPS")
+  data.currentid =    getTelemetryId("Curr")
+  data.flightmodeId = getTelemetryId("Tmp1")
+  data.rssiId =       getTelemetryId("RSSI")
+  data.gpssatsid =    getTelemetryId("Tmp2")
+  data.headingid =    getTelemetryId("Hdg")
+  data.fuelid =       getTelemetryId("Fuel")
+
+
   --init Telemetry Variables 
   data.battsum =    0
+  data.cellnum =    0
   data.alt =        0
   data.spd =        0
   data.current =    0
@@ -74,6 +77,7 @@ local GPSOKAY=1 --1=play Wav files for Gps Stat , 0= Disable wav Playing for Gps
   data.rssi =       0
   data.gpssatcount =0
   data.heading =    0
+  data.isarm =      0
 
   --init Timer
   local oldTime={0,0,0,0,0,0}
@@ -108,13 +112,21 @@ local GPSOKAY=1 --1=play Wav files for Gps Stat , 0= Disable wav Playing for Gps
   local firsttime=0
   local DisplayTimer=0
   local settings = getGeneralSettings()
+
+  --init compass arrow
+  local arrowLine = {
+    {-4, 5, 0, -4},
+    {-3, 5, 0, -3},
+    {-2, 5, 0, -2},
+    {-1, 5, 0, -1},
+    {1, 5, 0, -1},
+    {2, 5, 0, -2},
+    {3, 5, 0, -3},
+    {4, 5, 0, -4}
+  }
 --Script Initiation end  
 
-  
-  
-  
-  
-  
+
 --------------------------------------------------------------------------------  
 --------------------------------------------------------------------------------   
 --------------------------------------------------------------------------------
@@ -122,24 +134,26 @@ local GPSOKAY=1 --1=play Wav files for Gps Stat , 0= Disable wav Playing for Gps
 -------------------------------------------------------------------------------- 
 --------------------------------------------------------------------------------  
 --------------------------------------------------------------------------------  
-  
-  
+
+
 --------------------------------------------------------------------------------
 -- function Reset Variables
 -------------------------------------------------------------------------------
 local function ResetVar() 
-  
-	data.vfasid =    	getTelemetryId("VFAS")
-	data.celsid = 		getTelemetryId("Cels")
- 	data.altid =        getTelemetryId("Alt")
-	--data.gpsaltid =     getTelemetryId("GAlt") 
-	data.spdid =        getTelemetryId("GSpd")
-	data.gpsid =        getTelemetryId("GPS")
-	data.currentid =    getTelemetryId("Curr")
-	data.flightmodeId = getTelemetryId("Tmp1")
-	data.rssiId =       getTelemetryId("RSSI")
-	data.gpssatsid =    getTelemetryId("Tmp2")
-	data.headingid =    getTelemetryId("Hdg")
+
+    --data.battsumid =    getTelemetryId("VFAS")
+    data.vfasid =       getTelemetryId("VFAS")
+    data.celsid =       getTelemetryId("Cels")
+    data.altid =        getTelemetryId("Alt")
+    --data.gpsaltid =     getTelemetryId("GAlt") 
+    data.spdid =        getTelemetryId("GSpd")
+    data.gpsid =        getTelemetryId("GPS")
+    data.currentid =    getTelemetryId("Curr")
+    data.flightmodeId = getTelemetryId("Tmp1")
+    data.rssiId =       getTelemetryId("RSSI")
+    data.gpssatsid =    getTelemetryId("Tmp2")
+    data.headingid =    getTelemetryId("Hdg")
+    data.fuelid =       getTelemetryId("Fuel")
   
     Time={0,0,0,0,0,0}
     Vspeed = 0.0
@@ -161,8 +175,7 @@ local function ResetVar()
     settings = getGeneralSettings()
     data.lon=nil
     data.lat=nil
-    
-	end
+end
   
   
 --------------------------------------------------------------------------------
@@ -181,25 +194,25 @@ end
 local function SayBattPercent()  
 
   if (battpercent < (lastsaynbattpercent-10)) then --only say in 10 % steps
-       
+
     Time[6] = Time[6] + (getTime() - oldTime[6]) 
         
     if Time[6]> 700 then --and only say if battpercent 10 % below for more than 10sec
       lastsaynbattpercent=(round(battpercent*0.1)*10)
       Time[6] = 0
-      playNumber(round(lastsaynbattpercent), 8, 0)
+      playNumber(round(lastsaynbattpercent), 13, 0)
       if lastsaynbattpercent <= 10 then 
         playFile("batcrit.wav") 
       end
     end
-    
+
     oldTime[6] = getTime() 
-  
+
   else    
     Time[6] = 0
     oldTime[6] = getTime() 
   end
-  
+
 end
  
  
@@ -229,25 +242,23 @@ local temp = 0.0 --Valueholder
 --------------------------------------------------------------------------------
 -- funnction Lipo Cell Dection 
 --------------------------------------------------------------------------------
-   local function BatteryCalcCellVoltageAndTyp()  
-       
-       if math.ceil(data.battsum/4.37) > battype and data.battsum<4.37*8 then 
-          battype=math.ceil(data.battsum/4.37)
-         
-          if battype==7 then battype=8 end--dont Support 5s&7s Battery, its Danger to Detect: if you have an Empty 8s its lock like an 7s...
-          if battype==5 then battype=6 end 
-         
-          if data.battsum > 4.22*battype then --HVLI is detected
-            HVlipoDetected=1
-          else
-            HVlipoDetected=0
-          end
-        end
-      
+   local function BatteryCalcCellVoltageAndTyp()
+      if (battype==0) then
+          if math.ceil(data.battsum/4.37) > battype and data.battsum<4.37*8 then 
+             battype=math.ceil(data.battsum/4.37)
+             if battype==7 then battype=8 end --dont Support 5s&7s Battery, its Danger to Detect: if you have an Empty 8s its lock like an 7s...
+             if battype==5 then battype=6 end 
+           end
+      end
+      if data.battsum > 4.22*battype then --HVLI is detected
+         HVlipoDetected=1
+      else
+         HVlipoDetected=0
+      end
       if battype > 0 then 
-      CellVolt = data.battsum/battype 
-     end
-  end
+         CellVolt = data.battsum/battype 
+      end
+   end
   
 --------------------------------------------------------------------------------
 -- funnction conti Lipo Resistance Calculate V0.73 ALPHA ilihack
@@ -326,7 +337,7 @@ end
   -- funnction Lipo Range Calculate with COMSUME
 --------------------------------------------------------------------------------
   local function BatteryLevelCalcmah()  --calc Battery Percent with mah comsume
-    if BattLevelmAh~=0 then
+    if BattLevelmAh>0 then
       battpercent= round((100/BattLevelmAh)*(BattLevelmAh-totalbatteryComsum))  
     end
     if battpercent<0 then battpercent=0 end
@@ -446,16 +457,16 @@ local function loadGpsData()
   if GPSOKAY==3 and (type(data.gps) == "table") then
     
     if data.gps["lat"] ~= nil and data.lat==nil then
-	    data.lat = data.gps["lat"]
-	  elseif data.gps["lon"] ~= nil and data.lon==nil then
-	    data.lon = data.gps["lon"]
-	  else
-      local sin=math.sin--locale are faster
-      local cos=math.cos
-      local z1 = (sin(data.lon - data.gps["lon"]) * cos(data.lat) )*6358364.9098634
-	    local z2 = (cos(data.gps["lat"]) * sin(data.lat) - sin(data.gps["lat"]) * cos(data.lat) * cos(data.lon - data.gps["lon"]) )*6358364.9098634 
-      gps_hori_Distance =  (math.sqrt( z1*z1 + z2*z2))/100
-      
+        data.lat = data.gps["lat"]
+    elseif data.gps["lon"] ~= nil and data.lon==nil then
+        data.lon = data.gps["lon"]
+    else
+    local sin=math.sin--locale are faster
+    local cos=math.cos
+    local z1 = (sin(data.lon - data.gps["lon"]) * cos(data.lat) )*6358364.9098634
+    local z2 = (cos(data.gps["lat"]) * sin(data.lat) - sin(data.gps["lat"]) * cos(data.lat) * cos(data.lon - data.gps["lon"]) )*6358364.9098634 
+    gps_hori_Distance =  (math.sqrt( z1*z1 + z2*z2))/100
+
     end      
             
   end
@@ -463,23 +474,30 @@ end
 
 
 --------------------------------------------------------------------------------
--- function Get new Telemetry Valeu 
+-- function Get new Telemetry Value
 --------------------------------------------------------------------------------
-  local function GetnewTelemetryValue()
-    
-    local getValue = getValue --faster
-	
-	--if Cels is available from FrSky FLVSS then use it, else use VFAS
-	local cellResult = getValue(data.celsid)
-	if (type(cellResult) == "table") then
-		data.battsum = 0
-		for i, v in ipairs(cellResult) do
-			data.battsum = data.battsum + v
-		end
-	else
-		data.battsum =    getValue(data.vfasid)
-	end
-    
+local function GetnewTelemetryValue()
+local getValue = getValue --faster
+
+--if Cels is available from FrSky FLVSS then use it, else use VFAS
+local cellResult = getValue(data.celsid)
+   if (type(cellResult) == "table") then
+      data.battsum = 0
+      if (battype == 0) then
+         for i, v in ipairs(cellResult) do
+            data.battsum = data.battsum + v
+            battype = battype +1
+         end
+      else
+         for i, v in ipairs(cellResult) do
+            data.battsum = data.battsum + v
+         end
+      end
+   else
+      data.battsum =    getValue(data.vfasid)
+   end
+
+    --data.battsum =    getValue(data.battsumid)
     data.alt =        getValue(data.altid)
     data.spd =        getValue(data.spdid) --knotes per h 
     data.current =    getValue(data.currentid)
@@ -488,15 +506,8 @@ end
     data.gpssatcount =getValue(data.gpssatsid)
     data.gps =        getValue(data.gpsid)
     data.heading =    getValue(data.headingid)
-  end
-    
-
-    
-    
-    
-    
-    
-    
+    data.fuel =       getValue(data.fuelid)
+end
     
     
     
@@ -566,7 +577,7 @@ end
       drawText(getLastPos(), 57,"H", BLINK, 0) 
     end
     drawText(getLastPos(), 57, "V ", 0)
-    drawText(getLastPos(), 58, battype.."s" , SMLSIZE)
+    drawText(getLastPos(), 58, battype.."S" , SMLSIZE)
    
 
 -- ###############################################################
@@ -575,6 +586,9 @@ end
     
     if data.rssi > 38 then
       rxpercent =round(rxpercent*0.5+0.5*(((math.log(data.rssi-28, 10)-1)/(math.log(72, 10)-1))*100))
+      if rxpercent > 100 then
+          rxpercent = 100
+      end
     else
       rxpercent=0
     end
@@ -620,8 +634,8 @@ end
         drawText(getLastPos(), 25, round(data.spd*1.149), MIDSIZE)
         drawText(getLastPos(), 29, "mph", SMLSIZE)
       else
-        drawText(getLastPos(), 25, round(data.spd*1.851), MIDSIZE)
-        drawText(getLastPos(), 29, "kmh", SMLSIZE)
+	drawText(getLastPos(), 25, round(data.spd*1.851*2), MIDSIZE)
+	drawText(getLastPos(), 29, "kmh", SMLSIZE)	
       end    
       
         
@@ -647,19 +661,38 @@ end
     
     if data.heading <0 or data.heading >360 then HdgOrt="Error"  
       elseif data.heading <  22.5  then HdgOrt="N"     
-      elseif data.heading <  67.5  then HdgOrt="NO" 
-      elseif data.heading <  112.5 then HdgOrt="O"  
-      elseif data.heading <  157.5 then HdgOrt="OS" 
+      elseif data.heading <  67.5  then HdgOrt="NE" 
+      elseif data.heading <  112.5 then HdgOrt="E"  
+      elseif data.heading <  157.5 then HdgOrt="SE" 
       elseif data.heading <  202.5 then HdgOrt="S"  
       elseif data.heading <  247.5 then HdgOrt="SW"    
       elseif data.heading <  292.5 then HdgOrt="W"     
-      elseif data.heading <  337.5 then HdgOrt="WN"    
+      elseif data.heading <  337.5 then HdgOrt="NW"    
       elseif data.heading <= 360.0 then HdgOrt="N"    
     end
     
     drawText(175,0, HdgOrt.." "..data.heading,SMLSIZE)
     drawText(getLastPos(), -2, 'o', SMLSIZE)  
   end
+
+
+-- ###############################################################
+-- Display Compass arrow data
+-- ###############################################################
+
+    sinCorr = math.sin(math.rad(data.heading))
+    cosCorr = math.cos(math.rad(data.heading))
+    for index, point in pairs(arrowLine) do
+        X1 = 150 + math.floor(point[1] * cosCorr - point[2] * sinCorr + 0.5)
+        Y1 = 5 + math.floor(point[1] * sinCorr + point[2] * cosCorr + 0.5)
+        X2 = 150 + math.floor(point[3] * cosCorr - point[4] * sinCorr + 0.5)
+        Y2 = 5 + math.floor(point[3] * sinCorr + point[4] * cosCorr + 0.5)
+        if X1 == X2 and Y1 == Y2 then
+            lcd.drawPoint(X1, Y1, SOLID, FORCE)
+        else
+            lcd.drawLine (X1, Y1, X2, Y2, SOLID, FORCE)
+        end
+    end
    
    
 -- ###############################################################
@@ -690,10 +723,14 @@ end
    
    
 -- ###############################################################
--- CurrentTotal Draw Consum Drawing
+-- CurrentTotal Draw Consum Drawing AND single cell voltage
 -- ###############################################################
  
-    drawText(46, 58, "Used: "..(round(totalbatteryComsum))..'mAh',SMLSIZE)
+   if DisplayTimer==1 then
+      drawText(46, 58, "Used: "..(round(totalbatteryComsum))..'mAh',SMLSIZE)
+      elseif DisplayTimer==0 then
+         drawText(46, 58, "Cell: "..(CellVolt)..'V',SMLSIZE)
+   end
    
   
 -- ###############################################################
@@ -738,6 +775,7 @@ end
 local FourDigitFlightMode = math.floor((data.flightmodeNr % 10000) / 1000)
 local ThreeDigitFlightMode = math.floor((data.flightmodeNr % 1000) / 100)
 local TwoDigitFlightMode = math.floor((data.flightmodeNr % 100) / 10)
+local OneDigitFlightMode = data.flightmodeNr % 10
 local FlightModeName = {}
 
     FlightModeName[0]="Angle"
@@ -747,8 +785,23 @@ local FlightModeName = {}
     FlightModeName[4]="WayPoint"
     FlightModeName[5]="Invalid Mode"
     FlightModeName[6]="No Telemetry"
+    FlightModeName[7]="Acro"
 
-    
+local FlightArmName = {}
+
+    FlightArmName[0]="Arm"
+    FlightArmName[1]="No Arm"
+    FlightArmName[2]="Armed"
+  
+  if OneDigitFlightMode ==1 then
+    data.isarm = 0
+  elseif OneDigitFlightMode == 5 then
+    data.isarm = 2
+  else
+    data.isarm = 1
+  end
+
+
 	if data.flightmodeNr < 0 then
       data.flightmodeNr=5 
 	
@@ -765,7 +818,10 @@ local FlightModeName = {}
 		data.flightmodeNr=1
 	
 	elseif TwoDigitFlightMode == 1 then
-		data.flightmodeNr = 0
+    data.flightmodeNr = 0
+  
+  elseif TwoDigitFlightMode == 0 then
+		data.flightmodeNr = 7
   
 	elseif data.flightmodeId ==-1 or ( rxpercent==0 and data.flightmodeNr==0 )then
       data.flightmodeNr=6
@@ -775,53 +831,61 @@ local FlightModeName = {}
 	end
     
     
-    drawText(68, 1, FlightModeName[data.flightmodeNr], MIDSIZE)
+    drawText(50, 1, FlightArmName[data.isarm].." "..FlightModeName[data.flightmodeNr], MIDSIZE)
     
+    if data.flightmodeNr~=lastflightModeNumber and SayFlightMode == 1 then
+      playFile("/SCRIPTS/WAV/AVFM"..data.flightmodeNr.."A.wav")
+    lastflightModeNumber=data.flightmodeNr
+  end
   
 
 -- ###############################################################
 -- Flightmode Image
 -- ###############################################################
 
-    -- if data.flightmodeNr == 6 or data.flightmodeNr == 9 then
-      -- lcd.drawPixmap(50, 2, "/SCRIPTS/BMP/H.bmp")  
-    if data.flightmodeNr == 0 or data.flightmodeNr == 1 then
-      lcd.drawPixmap(50, 2, "/SCRIPTS/BMP/stab.bmp")
-    else
-      lcd.drawPixmap(50, 2, "/SCRIPTS/BMP/gps.bmp")
-    end
+  
+ -- if data.flightmodeNr == 6 or data.flightmodeNr == 9 or data.flightmodeNr == 28 or data.flightmodeNr == 29 then
+ --     lcd.drawPixmap(50, 2, "/SCRIPTS/BMP/H.bmp")  
+ --   elseif (data.flightmodeNr >= 0 and data.flightmodeNr <= 2) or (data.flightmodeNr >= 18 and data.flightmodeNr <= 23) then
+ --     lcd.drawPixmap(50, 2, "/SCRIPTS/BMP/stab.bmp")
+ --   elseif data.flightmodeNr~=-1 or data.flightmodeNr~=12 then
+  --    lcd.drawPixmap(50, 2, "/SCRIPTS/BMP/gps.bmp")
+  --  end
   
 
 -- ###############################################################
 -- GPS Fix
 -- ###############################################################
 
-    local gpsFix = math.floor(data.gpssatcount / 1000)
-    local satCount = data.gpssatcount % 100
+    local gpsFix =  (data.gpssatcount%10)
+    local satCount =   (data.gpssatcount -  (data.gpssatcount%10))*0.1
     
     if data.gpssatsid==-1 then 
-      drawText(68, 15, "Check Telemetry Tem2", SMLSIZE)
+      drawText(50, 15, "Check Telemetry Tem2", SMLSIZE)
         
     
-    elseif gpsFix == 3 then
-        drawText(70,15, "3D Fix & Home, "..satCount..' Sats', SMLSIZE)
+    elseif gpsFix >= 4 then
+        drawText(50,15, "3D D.GPS, "..satCount..' Sats', SMLSIZE)
         if GPSOKAY==1 and satCount>6 then
           GPSOKAY=3
           playFile("gps.wav") 
           playFile("good.wav") 
         end
 
-    elseif gpsFix == 1 then
-        drawText(70,15, "3D FIX, "..satCount..' Sats', SMLSIZE)
+    elseif gpsFix == 3 then
+        drawText(50,15, "3D FIX, "..satCount..' Sats', SMLSIZE)
         if GPSOKAY==1 and satCount>6 then
           GPSOKAY=3
           playFile("gps.wav") 
           playFile("good.wav") 
         end
         
+    elseif gpsFix == 2 then
+        drawText(50,15, "2D FIX, "..satCount..' Sats', BLINK+SMLSIZE)
+        
     
     else 
-        drawText(70,15, "NO FIX, "..satCount.." Sats", BLINK+SMLSIZE) 
+        drawText(50,15, "NO FIX, "..satCount.." Sats", BLINK+SMLSIZE) 
         if GPSOKAY==3 then
           GPSOKAY=1
           playFile("gps.wav") 
@@ -892,7 +956,13 @@ local function run(event)
   
   if HeadingOrDist ==1 or HeadingOrDist ==2       then loadGpsData() end
   if CalcBattResistance==1                        then BatteryResistanceCalc() end
-  if BattLevelmAh>0                               then BatteryLevelCalcmah()  else BatteryLevelCalcVoltage() end
+  if BattLevelmAh > 0 then
+      BatteryLevelCalcmah()
+  elseif BattLevelmAh < 0 then
+      battpercent = data.fuel
+  else
+      BatteryLevelCalcVoltage()
+  end
   if SaybatteryPercent==1                         then SayBattPercent()     end
   
   CalcDisplayTimer()
