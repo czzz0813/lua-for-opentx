@@ -12,9 +12,9 @@
 --Setup:                                                                                  #
 --                                                                                        #
 local HeadingOrDist = 2       --draw Hdg=0 / Draw Distance=1 / Draw Both alternatel=2     #
-local BatterymahAlarm = 0 --0=off or like 2200 for Alarming if you used more 2200mAh      #
+local BatterymahAlarm = 1500 --0=off or like 2200 for Alarming if you used more 2200mAh      #
 local SaybatteryPercent=1 ---0=off or 1 if you will hear you Batterypercent in 10% Steps  #
-local CellVoltAlarm=3.3 --0=off or like 3.3 to get an Alarm if you have less than 3.3V    #
+local CellVoltAlarm=3.5 --0=off or like 3.3 to get an Alarm if you have less than 3.3V    #
 --                                                                                        #
 --#########################################################################################                                                  
 -- Advance Configs:                                                                       #
@@ -25,7 +25,7 @@ local battype=0   -- 0=Autodetection (1s,2s,3s,4s,6s,8s) or 7 for an 7s Battery 
 local BattLevelmAh = 0 --if 0 BatteryLevel calc from Volt, if -1 Fuel is used else        #
                        --from this mAh Value                                             #
 local GPSOKAY=1 --1=play Wav files for Gps Stat , 0= Disable wav Playing for Gps Status   # 
-local SayFlightMode = 1 --0=off 1=on then play wav for Flightmodes changs                 #
+local SayFlightMode = 0 --0=off 1=on then play wav for Flightmodes changs                 #
 --                                                                                        #
 --######################################################################################### 
 
@@ -392,7 +392,7 @@ end
 --------------------------------------------------------------------------------
   local function AlarmifmaxMah()
     if BatterymahAlarm  > 0 and BatterymahAlarm < totalbatteryComsum then 
-      playFile("battcns.wav")
+      playFile("lowbat.wav")
       BatterymahAlarm=0
     end
 	end
@@ -405,7 +405,7 @@ end
     if CellVolt  < CellVoltAlarm and data.battsum >0.5  then 
         Time[3] = Time[3] + (getTime() - oldTime[3])
         if Time[3] >=800 then --8s
-          playFile("battcns.wav")
+          playFile("lowbat.wav")
           Time[3] = 0
         end
       oldTime[3] = getTime()
